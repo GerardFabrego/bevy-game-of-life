@@ -1,4 +1,9 @@
 use bevy::{prelude::*, window::WindowResolution};
+use ui::MainMenuPlugin;
+
+mod ui;
+
+const GRID_SIZE: i32 = 100;
 
 fn main() {
     App::new()
@@ -10,5 +15,6 @@ fn main() {
             }),
             ..default()
         }))
+        .add_plugins(MainMenuPlugin)
         .run();
 }
