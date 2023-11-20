@@ -1,6 +1,9 @@
 use bevy::{prelude::*, window::WindowResolution};
+use camera::CameraPlugin;
 use ui::MainMenuPlugin;
 
+mod camera;
+mod input;
 mod ui;
 
 const GRID_SIZE: i32 = 100;
@@ -15,6 +18,6 @@ fn main() {
             }),
             ..default()
         }))
-        .add_plugins(MainMenuPlugin)
+        .add_plugins((CameraPlugin, MainMenuPlugin))
         .run();
 }
