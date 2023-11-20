@@ -1,9 +1,6 @@
-use bevy::{
-    app::AppExit,
-    ecs::world,
-    prelude::*,
-    window::{Cursor, PrimaryWindow},
-};
+use std::time::Duration;
+
+use bevy::{app::AppExit, prelude::*, window::PrimaryWindow};
 
 use crate::{
     ui::{GameExitEvent, SimulationStartEvent, SimulationStopEvent},
@@ -12,8 +9,10 @@ use crate::{
 
 pub const SPRITE_SIZE: f32 = 32.0;
 
-#[derive(Component)]
+#[derive(Component, Debug)]
 pub struct Cell(CellState);
+
+#[derive(Debug)]
 
 enum CellState {
     Alive,
@@ -37,6 +36,9 @@ struct WorldPositionErase(Option<Vec2>);
 #[derive(Resource)]
 struct IsSimulationRunning(bool);
 
+#[derive(Resource)]
+struct SimulationTimer(Timer);
+
 pub struct SimulationPlugin;
 
 impl Plugin for SimulationPlugin {
@@ -45,9 +47,21 @@ impl Plugin for SimulationPlugin {
             .insert_resource(WorldPositionDraw(None))
             .insert_resource(WorldPositionErase(None))
             .insert_resource(IsSimulationRunning(false))
+            .insert_resource(SimulationTimer(Timer::new(
+                Duration::from_millis(500),
+                TimerMode::Repeating,
+            )))
             .add_systems(Startup, setup)
             .add_systems(Update, (set_mouse_world_position, draw_cells))
-            .add_systems(Update, (start_simulation, stop_simulation))
+            .add_systems(
+                Update,
+                (
+                    start_simulation,
+                    stop_simulation,
+                    run_simulation,
+                    run_simulation_timer,
+                ),
+            )
             .add_systems(Update, exit_game);
     }
 }
@@ -159,7 +173,7 @@ fn is_inside_cell(value: Vec2, center: Vec2, dimensions: Vec2) -> bool {
         && value.y <= center.y + dimensions.y / 2.0
 }
 
-fn exit_game(mut exit_writer: EventWriter<AppExit>, mut event_reader: EventReader<GameExitEvent>) {
+fn exit_game(mut exit_writer: EventWriter<AppExit>, event_reader: EventReader<GameExitEvent>) {
     if !event_reader.is_empty() {
         exit_writer.send(AppExit);
     }
@@ -181,4 +195,56 @@ fn stop_simulation(
     if simulation_reader.read().next().is_some() {
         is_simulation_running.0 = false;
     }
+}
+
+fn run_simulation(
+    mut cells: Query<(&mut Cell, &mut Handle<Image>)>,
+    is_running: Res<IsSimulationRunning>,
+    sprite_images: Res<SpriteImages>,
+    simulation_timer: Res<SimulationTimer>,
+) {
+    if simulation_timer.0.finished() && is_running.0 {
+        let life_grid: Vec<_> = cells
+            .iter_mut()
+            .map(|(cell, _)| match cell.0 {
+                CellState::Alive => true,
+                CellState::Dead | CellState::Empty => false,
+            })
+            .collect();
+
+        for (index, (mut cell, mut sprite)) in cells.iter_mut().enumerate() {
+            let mut neighbour_count = 0;
+
+            let x = index as i32 % GRID_SIZE;
+            let y = index as i32 / GRID_SIZE;
+
+            for xi in (x - 1)..(x + 2) {
+                for yi in (y - 1)..(y + 2) {
+                    if (xi != yi) && (0..GRID_SIZE).contains(&xi) && (0..GRID_SIZE).contains(&yi) {
+                        let one_dimension_index = xi + yi * GRID_SIZE;
+
+                        if life_grid[one_dimension_index as usize] {
+                            neighbour_count += 1;
+                        }
+                    }
+                }
+            }
+
+            if !(2..=3).contains(&neighbour_count) {
+                if let CellState::Alive = cell.0 {
+                    cell.0 = CellState::Dead;
+                    *sprite = sprite_images.dead_cell.clone();
+                }
+            }
+
+            if neighbour_count == 3 {
+                cell.0 = CellState::Alive;
+                *sprite = sprite_images.alive_cell.clone();
+            }
+        }
+    }
+}
+
+fn run_simulation_timer(time: Res<Time>, mut match_time: ResMut<SimulationTimer>) {
+    match_time.0.tick(time.delta());
 }
