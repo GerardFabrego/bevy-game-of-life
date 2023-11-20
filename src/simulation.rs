@@ -1,10 +1,14 @@
 use bevy::{
+    app::AppExit,
     ecs::world,
     prelude::*,
     window::{Cursor, PrimaryWindow},
 };
 
-use crate::GRID_SIZE;
+use crate::{
+    ui::{GameExitEvent, SimulationStartEvent, SimulationStopEvent},
+    GRID_SIZE,
+};
 
 pub const SPRITE_SIZE: f32 = 32.0;
 
@@ -42,7 +46,9 @@ impl Plugin for SimulationPlugin {
             .insert_resource(WorldPositionErase(None))
             .insert_resource(IsSimulationRunning(false))
             .add_systems(Startup, setup)
-            .add_systems(Update, (set_mouse_world_position, draw_cells));
+            .add_systems(Update, (set_mouse_world_position, draw_cells))
+            .add_systems(Update, (start_simulation, stop_simulation))
+            .add_systems(Update, exit_game);
     }
 }
 
@@ -151,4 +157,28 @@ fn is_inside_cell(value: Vec2, center: Vec2, dimensions: Vec2) -> bool {
         && value.x <= center.x + dimensions.x / 2.0
         && value.y >= center.y - dimensions.y / 2.0
         && value.y <= center.y + dimensions.y / 2.0
+}
+
+fn exit_game(mut exit_writer: EventWriter<AppExit>, mut event_reader: EventReader<GameExitEvent>) {
+    if !event_reader.is_empty() {
+        exit_writer.send(AppExit);
+    }
+}
+
+fn start_simulation(
+    mut simulation_reader: EventReader<SimulationStartEvent>,
+    mut is_simulation_running: ResMut<IsSimulationRunning>,
+) {
+    if simulation_reader.read().next().is_some() {
+        is_simulation_running.0 = true;
+    }
+}
+
+fn stop_simulation(
+    mut simulation_reader: EventReader<SimulationStopEvent>,
+    mut is_simulation_running: ResMut<IsSimulationRunning>,
+) {
+    if simulation_reader.read().next().is_some() {
+        is_simulation_running.0 = false;
+    }
 }
