@@ -1,8 +1,8 @@
 use bevy::prelude::*;
 
-const NORMAL_BUTTON: Color = Color::rgb(0.8, 0.8, 0.8);
-const HOVERED_BUTTON: Color = Color::rgb(0.4, 0.8, 0.8);
-const PRESSED_BUTTON: Color = Color::rgb(0.4, 1.0, 1.0);
+const NORMAL_BUTTON_COLOR: Color = Color::rgb(0.8, 0.8, 0.8);
+const HOVERED_BUTTON_COLOR: Color = Color::rgb(0.4, 0.8, 0.8);
+const PRESSED_BUTTON_COLOR: Color = Color::rgb(0.4, 1.0, 1.0);
 
 #[derive(Event)]
 pub struct GameExitEvent;
@@ -14,7 +14,7 @@ pub struct SimulationStartEvent;
 pub struct SimulationStopEvent;
 
 #[derive(Component)]
-struct Button(ButtonType);
+struct CustomButton(ButtonType);
 
 enum ButtonType {
     Start,
@@ -29,7 +29,8 @@ impl Plugin for MainMenuPlugin {
         app.add_event::<GameExitEvent>()
             .add_event::<SimulationStartEvent>()
             .add_event::<SimulationStopEvent>()
-            .add_systems(Startup, setup);
+            .add_systems(Startup, setup)
+            .add_systems(Update, button_system);
     }
 }
 
@@ -67,21 +68,21 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
                         .with_children(|parent| {
                             parent.spawn(build_text("PLAY", &asset_server));
                         })
-                        .insert(Button(ButtonType::Start));
+                        .insert(CustomButton(ButtonType::Start));
 
                     parent
                         .spawn(build_button(&asset_server))
                         .with_children(|parent| {
                             parent.spawn(build_text("STOP", &asset_server));
                         })
-                        .insert(Button(ButtonType::Stop));
+                        .insert(CustomButton(ButtonType::Stop));
 
                     parent
                         .spawn(build_button(&asset_server))
                         .with_children(|parent| {
                             parent.spawn(build_text("EXIT", &asset_server));
                         })
-                        .insert(Button(ButtonType::Exit));
+                        .insert(CustomButton(ButtonType::Exit));
                 });
         });
 }
@@ -96,7 +97,7 @@ fn build_button(asset_server: &Res<AssetServer>) -> ButtonBundle {
             align_items: AlignItems::Center,
             ..default()
         },
-        background_color: BackgroundColor(NORMAL_BUTTON),
+        background_color: BackgroundColor(NORMAL_BUTTON_COLOR),
         image: UiImage::new(asset_server.load("sprites/button.png")),
         ..default()
     }
@@ -113,5 +114,30 @@ fn build_text(value: &str, asset_server: &Res<AssetServer>) -> TextBundle {
             },
         ),
         ..default()
+    }
+}
+
+fn button_system(
+    mut interaction_query: Query<
+        (&Interaction, &mut BackgroundColor, &CustomButton),
+        (Changed<Interaction>, With<Button>),
+    >,
+    mut start_writer: EventWriter<SimulationStartEvent>,
+    mut stop_writer: EventWriter<SimulationStopEvent>,
+    mut exit_writer: EventWriter<GameExitEvent>,
+) {
+    for (interaction, mut color, button) in interaction_query.iter_mut() {
+        match *interaction {
+            Interaction::Pressed => {
+                *color = PRESSED_BUTTON_COLOR.into();
+                match button.0 {
+                    ButtonType::Start => start_writer.send(SimulationStartEvent),
+                    ButtonType::Stop => stop_writer.send(SimulationStopEvent),
+                    ButtonType::Exit => exit_writer.send(GameExitEvent),
+                }
+            }
+            Interaction::Hovered => *color = HOVERED_BUTTON_COLOR.into(),
+            Interaction::None => *color = NORMAL_BUTTON_COLOR.into(),
+        }
     }
 }
